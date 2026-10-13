@@ -1,0 +1,98 @@
+#%RAML 1.0
+title: Retail Inventory Experience API
+version: v1
+baseUri: http://localhost:8081/api/v1
+
+types:
+  StockResponse:
+    type: object
+    properties:
+      sku: string
+      locationCode: string
+      warehouseCode: string
+      availableQty: integer
+      reorderPoint: integer
+      maximumLevel: integer
+      lastUpdatedTs: datetime
+    example:
+      sku: "SKU-HOME-5013"
+      locationCode: "CHN-C-04"
+      warehouseCode: "WHCHN01"
+      availableQty: 7
+      reorderPoint: 40
+      maximumLevel: 200
+      lastUpdatedTs: 2026-10-13T06:00:00Z
+  
+  ReorderRequest:
+    type: object
+    properties:
+      requestedBy: string
+      notes?: string
+    example:
+      requestedBy: "Procurement Team"
+      notes: "Manual override triggered due to high demand"
+
+  ReorderResponse:
+    type: object
+    properties:
+      message: string
+      sku: string
+      status: string
+      timestamp: datetime
+    example:
+      message: "Reorder triggered successfully"
+      sku: "SKU-HOME-5013"
+      status: "PENDING_SUPPLIER"
+      timestamp: 2026-10-13T07:11:00Z
+
+  ErrorResponse:
+    type: object
+    properties:
+      code: integer
+      message: string
+      description?: string
+
+/stock/{sku}:
+  get:
+    description: Retrieves stock levels, warehouse location, and reorder positions by SKU.
+    responses:
+      200:
+        body:
+          application/json:
+            type: StockResponse
+      404:
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              code: 404
+              message: "SKU_NOT_FOUND"
+              description: "The specified SKU does not exist in inventory."
+
+/reorder/{sku}:
+  post:
+    description: Manually triggers a reorder for a specific SKU, subject to the single open purchase order rule.
+    body:
+      application/json:
+        type: ReorderRequest
+    responses:
+      201:
+        body:
+          application/json:
+            type: ReorderResponse
+      409:
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              code: 409
+              message: "OPEN_PO_EXISTS"
+              description: "Reorder suppressed: An active purchase order already exists for this SKU."
+      404:
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              code: 404
+              message: "SKU_NOT_FOUND"
+              description: "The specified SKU was not found."

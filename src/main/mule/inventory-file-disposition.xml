@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+      xmlns:email="http://www.mulesoft.org/schema/mule/email"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+        http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <sub-flow name="file-disposition-and-notification-flow">
+        
+        <choice doc:name="Determine Disposition Path">
+            <!-- Unparseable or badly named files move to the error directory -->
+            <when expression="#[vars.loadStatus == 'FAILED' or vars.loadStatus == 'BAD_NAME']">
+                <set-variable variableName="targetDirectory" value="C:\data\inventory\error" doc:name="Set Error Path"/>
+            </when>
+            <!-- Successful or Skipped files (Duplicate/Stale) move to the dated archive directory -->
+            <otherwise>
+                <set-variable variableName="targetDirectory" 
+                              value="#['C:\\data\\inventory\\archive\\' ++ (now() as String {format: 'yyyy\\\\MM\\\\dd'})]" 
+                              doc:name="Set Archive Path"/>
+            </otherwise>
+        </choice>
+
+        <!-- Move the file out of the inbound directory -->
+        <file:move doc:name="Move File" config-ref="File_Config" 
+                   sourcePath="#['C:\\data\\inventory\\inbound\\' ++ vars.sourceFileName]" 
+                   targetPath="#[vars.targetDirectory]" 
+                   overwrite="false"/>
+                   
+        <!-- Save the final archive path for the email template -->
+        <set-variable variableName="archivePath" value="#[vars.targetDirectory ++ '\\' ++ vars.sourceFileName]" doc:name="Set Archive Path Var"/>
+
+        <!-- Construct the input payload required by your DWL email template -->
+        <ee:transform doc:name="Prepare Load Summary Metrics">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    loadStatus: vars.loadStatus default "SUCCESS",
+    totalRows: sizeOf(vars.rawRows default []),
+    acceptedRows: sizeOf(vars.validRows default []),
+    rejectedRows: sizeOf(vars.invalidRows default []),
+    skusChanged: sizeOf(vars.validRows default []),
+    reorderEvents: vars.reorderEventsCount default 0,
+    rejectReasons: vars.rejectMetrics default []
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <!-- Apply the professional DataWeave template you provided -->
+        <ee:transform doc:name="Apply Email Template DWL">
+            <ee:message>
+                <ee:set-payload resource="dwl/warehouse-ops-email-template.dwl" />
+            </ee:message>
+        </ee:transform>
+
+        <!-- Send the load summary email to warehouse operations -->
+        <email:send doc:name="Send Load Summary Email" config-ref="Email_SMTP" fromAddress="#[payload.from]" subject="#[payload.subject]">
+            <email:to-addresses>
+                <email:to-address value="#[payload.to]" />
+            </email:to-addresses>
+            <email:body contentType="text/plain">
+                <email:content><![CDATA[#[payload.body]]]></email:content>
+            </email:body>
+        </email:send>
+
+        <logger level="INFO" doc:name="Log Disposition Completion" 
+                message="#['[Correlation ID: ' ++ vars.correlationId ++ '] File moved to ' ++ vars.targetDirectory ++ ' and load summary email sent to warehouse operations.']"/>
+                
+    </sub-flow>
+</mule>

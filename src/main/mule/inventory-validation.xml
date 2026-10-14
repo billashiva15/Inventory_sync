@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <sub-flow name="inventory-validate-file-flow">
+
+        <!-- Step 1: Read CSV Stream Rows -->
+        <ee:transform doc:name="Read CSV Rows">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+if (isEmpty(payload)) 
+    []
+else 
+    payload match {
+        case is Array -> payload map ((row) -> {
+            sku: trim(row.sku default ""),
+            location: trim(row.location default ""),
+            countedQty: trim(row.countedQty default ""),
+            unitCost: trim(row.unitCost default ""),
+            currency: trim(row.currency default ""),
+            countedAt: trim(row.countedAt default ""),
+            uom: trim(row.uom default "")
+        })
+        case is String | Binary -> read(payload, "application/csv", { header: true, separator: "," }) map ((row) -> {
+            sku: trim(row.sku default ""),
+            location: trim(row.location default ""),
+            countedQty: trim(row.countedQty default ""),
+            unitCost: trim(row.unitCost default ""),
+            currency: trim(row.currency default ""),
+            countedAt: trim(row.countedAt default ""),
+            uom: trim(row.uom default "")
+        })
+        else -> []
+    }]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <!-- Step 2: Transform Message (DataWeave validates schema rules & assigns reason codes) -->
+        <ee:transform doc:name="Validate Rows via DWL">
+            <ee:message>
+                <ee:set-payload resource="dwl/validate-inventory-rows.dwl" />
+            </ee:message>
+        </ee:transform>
+
+        <!-- Step 3: Split into Valid and Invalid streams -->
+        <ee:transform doc:name="Separate Valid and Invalid Rows">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+    validRows: payload filter ((r) -> r.valid),
+    invalidRows: payload filter ((r) -> !r.valid)
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <!-- Step 4: Decision Tree (Is Row Valid?) -->
+        <choice doc:name="Are There Rejects?">
+            
+            <!-- [No Branch] Write invalid rows to Rejects file via Validation Module -->
+            <when expression="#[sizeOf(payload.invalidRows) > 0]">
+                <ee:transform doc:name="Format Rejects CSV Payload">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/csv header=true
+---
+payload.invalidRows map (item) -> {
+    lineNumber: item.lineNumber,
+    sku: item.sku,
+    location: item.location,
+    countedQty: item.countedQty,
+    reasonCode: item.reasonCode,
+    reason: item.reason
+}]]></ee:set-payload>
+                    </ee:message>
+                </ee:transform>
+                
+                <!-- File: Write Connector appends to rejects.csv -->
+                <file:write doc:name="Write to Rejects File" 
+                            config-ref="File_Config" 
+                            path="#['C:\\data\\inventory\\rejects\\' ++ vars.sourceFileName ++ '_rejects.csv']"/>
+            </when>
+            
+            <otherwise>
+                <logger level="INFO" doc:name="No Rejects Logger" message="#['[Correlation ID: ' ++ vars.correlationId ++ '] All rows passed validation successfully.']"/>
+            </otherwise>
+        </choice>
+
+        <!-- [Yes Branch] Pass valid payload data forward to DB Flow -->
+        <set-payload value="#[payload.validRows]" doc:name="Set Payload to Valid Rows Only"/>
+        
+        <flow-ref name="inventory-process-snapshot-flow" doc:name="Pass to DB Flow"/>
+
+    </sub-flow>
+
+</mule>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="supplier-api-test-suite.xml" />
+	<munit:test name="supplier-api-test-suite-supplier-submit-purchase-order-flowTest" doc:id="41de3bc4-3f9f-406f-a343-1d43a3b36c11" description="Test">
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to supplier-submit-purchase-order-flow" doc:id="84b420df-6736-4ff8-a2f0-393010bc47b0" name="supplier-submit-purchase-order-flow"/>
+		</munit:execution>
+	</munit:test>
+
+
+</mule>

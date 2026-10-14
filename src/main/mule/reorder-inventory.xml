@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:amqp="http://www.mulesoft.org/schema/mule/amqp"
+      xmlns:db="http://www.mulesoft.org/schema/mule/db"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+        http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+        http://www.mulesoft.org/schema/mule/amqp http://www.mulesoft.org/schema/mule/amqp/current/mule-amqp.xsd">
+
+    <amqp:config name="AMQP_Config" doc:name="AMQP Config" doc:id="490b277f-4433-4bdb-bd0f-211c15ee7f60" >
+		<amqp:connection host="puffin.rmq2.cloudamqp.com" port="5672" virtualHost="bzrxdyst" username="bzrxdyst" password="4ylQ1Finvtx8orR55rUKZbknYva9OJSm" />
+	</amqp:config>
+	<flow name="inventory-reorder-consumer-flow">
+        <!-- Listen to the queue off the file processing thread -->
+        <amqp:listener doc:name="Consume Reorder Queue" config-ref="AMQP_Config" queueName="inventory.reorder.queue" ackMode="AUTO" numberOfConsumers="1">
+        </amqp:listener>
+
+        <!-- Parse AMQP message and store it to preserve data across external HTTP calls -->
+        <ee:transform doc:name="Parse Payload &amp; Store Variables">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+            <ee:variables>
+                <ee:set-variable variableName="queuePayload"><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-variable>
+                <ee:set-variable variableName="correlationId"><![CDATA[attributes.headers.correlationId.bytes default payload.correlationId]]></ee:set-variable>
+                <ee:set-variable variableName="internalPoNumber"><![CDATA['PO-' ++ uuid()[0 to 7]]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+
+        <logger level="INFO" doc:name="Log Pickup" message="#['[Correlation ID: ' ++ vars.correlationId ++ '] Consumed reorder event for SKU: ' ++ vars.queuePayload.sku]"/>
+
+        <!-- Claim the reorder event (open PO guard) as PENDING before API call -->
+        <db:insert doc:name="Insert PENDING Reorder Event" config-ref="Database_Config">
+            <db:sql><![CDATA[
+                INSERT INTO reorder_events (event_id, sku, warehouse_code, supplier_code, available_qty, reorder_point, reorder_qty, source, status, attempts, correlation_id, raised_at)
+                VALUES (:eventId, :sku, :warehouseCode, :supplierCode, :availableQty, :reorderPoint, :reorderQty, :source, 'PENDING', 1, :correlationId, CURRENT_TIMESTAMP)
+            ]]></db:sql>
+            <db:input-parameters><![CDATA[#[{
+                eventId: vars.queuePayload.eventId,
+                sku: vars.queuePayload.sku,
+                warehouseCode: vars.queuePayload.warehouseCode,
+                supplierCode: vars.queuePayload.supplierCode,
+                availableQty: vars.queuePayload.availableQtyAllLocations,
+                reorderPoint: vars.queuePayload.reorderPoint,
+                reorderQty: vars.queuePayload.reorderQty,
+                source: vars.queuePayload.source,
+                correlationId: vars.correlationId
+            }]]]></db:input-parameters>
+        </db:insert>
+
+        <!-- Trigger outbound supplier API sub-flow -->
+        <flow-ref name="supplier-submit-purchase-order-flow" doc:name="Call Supplier API Sub-Flow"/>
+
+        <!-- Route database updates based on supplier API response outcomes defined in supplier-api.xml -->
+        <choice doc:name="Evaluate Supplier Result">
+            
+            <!-- Standard Success or 409 Idempotency Reconciliation -->
+            <when expression="#[vars.supplierResult.outcome == 'SUBMITTED' or vars.supplierResult.outcome == 'RECONCILIATION_REQUIRED']">
+                
+                <db:insert doc:name="Persist Purchase Order" config-ref="Database_Config">
+                    <db:sql><![CDATA[
+                        INSERT INTO purchase_orders (po_number, supplier_code, supplier_po_no, sku, warehouse_code, ordered_qty, unit_cost, status, idempotency_key, raised_at)
+                        VALUES (:poNumber, :supplierCode, :supplierPoNo, :sku, :warehouseCode, :orderedQty, :unitCost, 'RAISED', :idempotencyKey, CURRENT_TIMESTAMP)
+                    ]]></db:sql>
+                    <db:input-parameters><![CDATA[#[{
+                        poNumber: vars.internalPoNumber,
+                        supplierCode: vars.queuePayload.supplierCode,
+                        supplierPoNo: vars.supplierResult.responseBody.supplierPoNumber default vars.supplierResult.responseBody.existingSupplierPoNumber,
+                        sku: vars.queuePayload.sku,
+                        warehouseCode: vars.queuePayload.warehouseCode,
+                        orderedQty: vars.queuePayload.reorderQty,
+                        unitCost: vars.queuePayload.unitCost,
+                        idempotencyKey: vars.supplierIdempotencyKey
+                    }]]]></db:input-parameters>
+                </db:insert>
+
+                <db:update doc:name="Update Event to PO_RAISED" config-ref="Database_Config">
+                    <db:sql><![CDATA[
+                        UPDATE reorder_events 
+                        SET status = 'PO_RAISED', po_number = :poNumber, resolved_at = CURRENT_TIMESTAMP
+                        WHERE event_id = :eventId
+                    ]]></db:sql>
+                    <db:input-parameters><![CDATA[#[{ 
+                        eventId: vars.queuePayload.eventId,
+                        poNumber: vars.internalPoNumber 
+                    }]]]></db:input-parameters>
+                </db:update>
+            </when>
+
+            <!-- 422 Unprocessable Entity -> Permanent Failure -->
+            <when expression="#[vars.supplierResult.outcome == 'MOQ_REJECTED']">
+                
+                <db:update doc:name="Update Event to FAILED" config-ref="Database_Config">
+                    <db:sql><![CDATA[
+                        UPDATE reorder_events 
+                        SET status = 'FAILED', failure_reason = :reason, resolved_at = CURRENT_TIMESTAMP
+                        WHERE event_id = :eventId
+                    ]]></db:sql>
+                    <db:input-parameters><![CDATA[#[{ 
+                        eventId: vars.queuePayload.eventId,
+                        reason: vars.supplierResult.responseBody.message default 'MOQ requirement not met'
+                    }]]]></db:input-parameters>
+                </db:update>
+                
+                <!-- Explicitly raise error so global handler triggers the immediate procurement alert -->
+                <raise-error type="APP:INVALID_SUPPLIER_ORDER" description="#[vars.supplierResult.responseBody.message]"/>
+            </when>
+
+        </choice>
+    </flow>
+</mule>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="procurement-alerts-test-suite.xml" />
+	<munit:test name="procurement-alerts-test-suite-procurement-alerts-scheduled-flowTest" doc:id="f51a941d-7ce8-4dcb-8207-833a0189a63c" description="Test">
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to procurement-alerts-scheduled-flow" doc:id="ac402fdf-c769-4408-a84f-b5b143aa7864" name="procurement-alerts-scheduled-flow"/>
+		</munit:execution>
+	</munit:test>
+	<munit:test name="procurement-alerts-test-suite-send-procurement-summary-alert-flowTest" doc:id="2eb6b175-328a-4bed-9589-a958130fea0c" description="Test">
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to send-procurement-summary-alert-flow" doc:id="c2e3a253-4dd9-41d1-aa3c-02232ab659de" name="send-procurement-summary-alert-flow"/>
+		</munit:execution>
+	</munit:test>
+
+
+</mule>

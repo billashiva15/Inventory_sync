@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="inventory-database-test-suite.xml" />
+	<munit:test name="inventory-database-test-suite-inventory-process-snapshot-flowTest" doc:id="a40b9d64-1a94-4fbf-b0d8-b3e054e00ce7" description="Test">
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to inventory-process-snapshot-flow" doc:id="d469116b-d309-4b22-886e-2ec672c370fa" name="inventory-process-snapshot-flow"/>
+		</munit:execution>
+	</munit:test>
+	<munit:test name="inventory-database-test-suite-db-upsert-absolute-inventory-levelsTest" doc:id="410505b3-cc0f-486f-943c-c7b47916b5dc" description="Test">
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to db-upsert-absolute-inventory-levels" doc:id="12d46478-d5e7-4ac1-8636-b71c647b2325" name="db-upsert-absolute-inventory-levels"/>
+		</munit:execution>
+	</munit:test>
+
+
+</mule>

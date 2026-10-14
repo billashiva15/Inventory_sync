@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="Inventory-file-ingestion-test-suite.xml" />
+	<munit:test name="Inventory-file-ingestion-test-suite-inventory-file-ingestion-flowTest" doc:id="def9ad5f-6f80-4f02-b17a-13b575ca16f1" description="Test">
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to inventory-file-ingestion-flow" doc:id="6c94c4b1-a9d4-4973-b7f9-c2c0b3c0e73f" name="inventory-file-ingestion-flow"/>
+		</munit:execution>
+	</munit:test>
+
+
+</mule>

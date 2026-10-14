@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:db="http://www.mulesoft.org/schema/mule/db"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:email="http://www.mulesoft.org/schema/mule/email"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+        http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd">
+
+    <!-- Global Email SMTP Config -->
+    <email:smtp-config name="Email_SMTP" doc:name="Email_SMTP" >
+        <email:smtp-connection host="${smtp.host}" user="${smtp.user}" password="DummyPassword123" port="${smtp.port}"/>
+    </email:smtp-config>
+
+    <!-- Scheduled execution for the Low-Stock Digest -->
+    <flow name="procurement-alerts-scheduled-flow">
+        <scheduler doc:name="Daily Procurement Digest Scheduler">
+            <scheduling-strategy>
+                <fixed-frequency frequency="24" timeUnit="HOURS"/>
+            </scheduling-strategy>
+        </scheduler>
+        
+        <logger level="INFO" doc:name="Log Digest Start" message="Starting scheduled procurement low-stock digest run."/>
+        
+        <set-variable variableName="runTime" value="#[now()]" doc:name="Set Run Time"/>
+
+        <!-- Fetch SKUs at or below reorder point -->
+        <db:select doc:name="Select SKUs Below Reorder Point" config-ref="Database_Config">
+            <db:sql><![CDATA[
+                SELECT s.sku,
+                       s.description,
+                       s.supplier_code,
+                       SUM(i.available_qty) AS available_qty,
+                       s.reorder_point,
+                       s.maximum_level - SUM(i.available_qty) AS reorder_qty
+                FROM sku_master s
+                JOIN inventory_stock i ON i.sku = s.sku
+                WHERE s.is_active = 'Y'
+                GROUP BY s.sku, s.description, s.supplier_code, s.reorder_point, s.maximum_level
+                HAVING SUM(i.available_qty) <= s.reorder_point;
+            ]]></db:sql>
+        </db:select>
+        
+        <!-- Transform DB result into the variable structure required by procurement-email-template.dwl -->
+        <ee:transform doc:name="Group and Prepare Email Variables">
+            <ee:variables>
+                <ee:set-variable variableName="skuCount"><![CDATA[%dw 2.0
+output application/java
+---
+sizeOf(payload default [])
+]]></ee:set-variable>
+                <ee:set-variable variableName="suppliers"><![CDATA[%dw 2.0
+output application/java
+---
+(payload default []) groupBy $.supplier_code mapObject ((lines, supplierCode) -> {
+    (supplierCode): {
+        supplierCode: supplierCode,
+        supplierName: "Supplier " ++ (supplierCode as String),
+        lines: lines map (l) -> {
+            sku: l.sku,
+            availableQty: l.available_qty,
+            reorderPoint: l.reorder_point,
+            reorderQty: l.reorder_qty,
+            openPo: "none", 
+            status: "PENDING"
+        }
+    }
+}) pluck $
+]]></ee:set-variable>
+                <ee:set-variable variableName="supplierCount"><![CDATA[%dw 2.0
+output application/java
+---
+sizeOf((payload default []) groupBy $.supplier_code)
+]]></ee:set-variable>
+                <ee:set-variable variableName="poRaisedCount"><![CDATA[0]]></ee:set-variable>
+                <ee:set-variable variableName="suppressedCount"><![CDATA[0]]></ee:set-variable>
+                <ee:set-variable variableName="failedCount"><![CDATA[0]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+
+        <!-- Format the final email payload -->
+        <ee:transform doc:name="Format Procurement Email Body">
+            <ee:message>
+                <ee:set-payload resource="dwl/procurement-email-template.dwl" />
+            </ee:message>
+        </ee:transform>
+
+        <!-- Send the digest via SMTP -->
+        <email:send doc:name="Send Low-Stock Digest" config-ref="Email_SMTP" fromAddress="#[payload.from]" subject="#[payload.subject]">
+            <email:to-addresses>
+                <email:to-address value="#[payload.to]" />
+            </email:to-addresses>
+            <email:cc-addresses>
+                <email:cc-address value="#[payload.cc]" />
+            </email:cc-addresses>
+            <email:body contentType="text/plain">
+                <email:content><![CDATA[#[payload.body]]]></email:content>
+            </email:body>
+        </email:send>
+
+        <!-- Record the digest run in the database -->
+        <db:insert doc:name="Record Digest Run" config-ref="Database_Config">
+            <db:sql><![CDATA[
+                INSERT INTO snapshot_log (file_name, file_checksum, warehouse_code, snapshot_ts, status, started_at, finished_at, correlation_id)
+                VALUES ('DIGEST_RUN', 'N/A', 'ALL', CURRENT_TIMESTAMP, 'PROCESSED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'DIGEST-' || UUID())
+            ]]></db:sql>
+        </db:insert>
+
+        <logger level="INFO" doc:name="Log Success" message="Procurement low-stock digest sent and recorded successfully."/>
+
+    </flow>
+
+    <!-- Immediate Alert Sub-Flow to handle Supplier API Failures -->
+    <sub-flow name="send-procurement-summary-alert-flow">
+        <logger level="INFO" doc:name="Log Alert Trigger" message="Triggering immediate procurement alert for supplier failure."/>
+        
+        <ee:transform doc:name="Format Failure Alert Email">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    to: "procurement@npn.example.com",
+    cc: "category.managers@npn.example.com",
+    from: "inventory-integration@npn.example.com",
+    subject: "URGENT: Supplier Order Failure",
+    body: "A supplier purchase order has failed and requires immediate attention.\n\n" ++
+          "Failure Reason: " ++ (vars.supplierFailureReason default "Unknown Error") ++ "\n\n" ++
+          "Please check the integration logs for Correlation ID: " ++ (vars.correlationId default "N/A")
+}
+]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <email:send doc:name="Send Immediate Failure Alert" config-ref="Email_SMTP" fromAddress="#[payload.from]" subject="#[payload.subject]">
+            <email:to-addresses>
+                <email:to-address value="#[payload.to]" />
+            </email:to-addresses>
+            <email:cc-addresses>
+                <email:cc-address value="#[payload.cc]" />
+            </email:cc-addresses>
+            <email:body contentType="text/plain">
+                <email:content><![CDATA[#[payload.body]]]></email:content>
+            </email:body>
+        </email:send>
+    </sub-flow>
+
+</mule>

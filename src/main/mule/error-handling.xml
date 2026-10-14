@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <!-- ====================================================== -->
+    <!-- GLOBAL ERROR HANDLER                                   -->
+    <!-- ====================================================== -->
+    <error-handler name="global-error-handler" doc:name="Global Error Handler">
+
+        <!-- Handle Database Connectivity Issues -->
+        <on-error-continue type="DB:CONNECTIVITY" enableNotifications="true" logException="true">
+            <logger level="ERROR" doc:name="Log DB Connectivity Error" 
+                    message="#['CRITICAL: Database connectivity failure encountered. Error: ' ++ error.description]"/>
+            <set-variable variableName="loadStatus" value="FAILED_DB_CONNECTIVITY"/>
+        </on-error-continue>
+
+        <!-- Handle Supplier API Validation / Rejection -->
+        <on-error-continue type="APP:INVALID_SUPPLIER_ORDER, HTTP:BAD_REQUEST, HTTP:CLIENT_SECURITY, EXPRESSION" enableNotifications="true" logException="true">
+            <logger level="ERROR" doc:name="Log Supplier Business Rejection" 
+                    message="#['Supplier order error or business rejection: ' ++ error.description]"/>
+            
+            <set-variable variableName="supplierFailureReason" value="#[error.description]"/>
+            
+            <!-- Safely call the procurement summary alert flow -->
+            <flow-ref name="send-procurement-summary-alert-flow" doc:name="Trigger Procurement Alert on Failure"/>
+        </on-error-continue>
+
+        <!-- Handle Transient / Service Unavailable Issues (503) -->
+        <on-error-propagate type="HTTP:SERVICE_UNAVAILABLE, HTTP:TIMEOUT" enableNotifications="true" logException="true">
+            <logger level="WARN" doc:name="Log Transient Error" 
+                    message="Transient error detected from external service. Propagating for retry backoff."/>
+        </on-error-propagate>
+
+        <!-- Fallback Global Catch-All Handler -->
+        <on-error-propagate type="ANY" enableNotifications="true" logException="true">
+            <logger level="ERROR" doc:name="Log Unhandled Exception" 
+                    message="#['Unhandled error type: ' ++ (error.errorType.asString default 'UNKNOWN') ++ ' - Description: ' ++ error.description]"/>
+        </on-error-propagate>
+
+    </error-handler>
+
+</mule>

@@ -1,0 +1,34 @@
+file:
+  inbound: "C:/data/inventory/inbound"
+  archive: "C:/data/inventory/archive"
+  error: "C:/data/inventory/error"
+  rejects: "C:/data/inventory/rejects"
+
+http:
+  port: "8081"
+
+db:
+  host: "localhost"
+  port: "3306"
+  user: "root"
+  password: "![INSERT_ENCRYPTED_DB_PASSWORD_HERE]"
+  database: "retail_inventory_db"
+
+amqp:
+  host: "puffin-01.rmq2.cloudamqp.com"
+  port: "5672"
+  virtualHost: "bzrxdyst"
+  username: "bzrxdyst"
+  password: "![INSERT_ENCRYPTED_AMQP_PASSWORD_HERE]"
+
+supplier:
+  host: "api.supplier-0042.example.com"
+  port: "443"
+  basePath: "/purchase-orders"
+  token: "![INSERT_ENCRYPTED_TOKEN_HERE]"
+
+smtp:
+  host: "sandbox.smtp.mailtrap.io"
+  port: "2525"
+  user: "fca475a025d9ac"
+  password: "![PASTE_ENCRYPTED_PASSWORD_HERE]"

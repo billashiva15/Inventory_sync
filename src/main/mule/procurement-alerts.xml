@@ -12,8 +12,12 @@
         http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd">
 
     <!-- Global Email SMTP Config -->
-    <email:smtp-config name="Email_SMTP" doc:name="Email_SMTP" >
-        <email:smtp-connection host="${smtp.host}" user="${smtp.user}" password="DummyPassword123" port="${smtp.port}"/>
+    <email:smtp-config name="Email_SMTP" doc:name="Email_SMTP">
+        <email:smtp-connection host="smtp.gmail.com" user="billashiva15@gmail.com" password="qslb siqw zkfd jktk" port="587">
+            <email:properties>
+                <email:property key="mail.smtp.starttls.enable" value="true" />
+            </email:properties>
+        </email:smtp-connection>
     </email:smtp-config>
 
     <!-- Scheduled execution for the Low-Stock Digest -->
@@ -90,7 +94,7 @@ sizeOf((payload default []) groupBy $.supplier_code)
         </ee:transform>
 
         <!-- Send the digest via SMTP -->
-        <email:send doc:name="Send Low-Stock Digest" config-ref="Email_SMTP" fromAddress="#[payload.from]" subject="#[payload.subject]">
+        <email:send doc:name="Send Low-Stock Digest" config-ref="Email_SMTP" fromAddress='#["billashiva15@gmail.com"]' subject="#[payload.subject]">
             <email:to-addresses>
                 <email:to-address value="#[payload.to]" />
             </email:to-addresses>
@@ -106,7 +110,7 @@ sizeOf((payload default []) groupBy $.supplier_code)
         <db:insert doc:name="Record Digest Run" config-ref="Database_Config">
             <db:sql><![CDATA[
                 INSERT INTO snapshot_log (file_name, file_checksum, warehouse_code, snapshot_ts, status, started_at, finished_at, correlation_id)
-                VALUES ('DIGEST_RUN', 'N/A', 'ALL', CURRENT_TIMESTAMP, 'PROCESSED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'DIGEST-' || UUID())
+                VALUES ('DIGEST_RUN', 'N/A', 'ALL', CURRENT_TIMESTAMP, 'PROCESSED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CONCAT('DIGEST-', UUID()))
             ]]></db:sql>
         </db:insert>
 

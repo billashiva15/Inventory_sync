@@ -17,6 +17,8 @@
 	<flow name="inventory-reorder-consumer-flow">
         <!-- Listen to the queue off the file processing thread -->
         <amqp:listener doc:name="Consume Reorder Queue" config-ref="AMQP_Config" queueName="inventory.reorder.queue" ackMode="AUTO" numberOfConsumers="1">
+			<amqp:fallback-queue-definition />
+
         </amqp:listener>
 
         <!-- Parse AMQP message and store it to preserve data across external HTTP calls -->

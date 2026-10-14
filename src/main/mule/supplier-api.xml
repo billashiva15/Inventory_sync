@@ -13,18 +13,13 @@
     <!-- SUBMIT PURCHASE ORDER TO SUPPLIER                      -->
     <!-- ====================================================== -->
     <http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="74327de4-bb99-44a9-8d6e-90ad151f46f6" basePath="/purchase-orders" >
-		<http:request-connection protocol="HTTPS" host="api.supplier-0042.example.com" port="443" />
+		<http:request-connection host="localhost" port="443" />
 	</http:request-config>
 	<sub-flow name="supplier-submit-purchase-order-flow">
 
         <logger level="INFO"
                 doc:name="Supplier Submission Start"
-                message="#[
-                    'Submitting supplier order for SKU: '
-                    ++ (payload.sku default 'UNKNOWN')
-                    ++ ' with Correlation ID: '
-                    ++ (correlationId default 'NONE')
-                ]"/>
+                message="#['Submitting supplier order for SKU: '&#10;                    ++ (payload.sku default 'UNKNOWN')&#10;                    ++ ' with Correlation ID: '&#10;                    ++ (correlationId default 'NONE')]"/>
 
         <!-- Build supplier purchase order using professional external DWL script -->
         <ee:transform doc:name="Build Supplier Purchase Order Payload">
@@ -82,10 +77,7 @@
                     <when expression="#[vars.supplierResponse.attributes.statusCode == 409]">
                         <logger level="WARN"
                                 doc:name="Log Supplier Conflict"
-                                message="#[
-                                    'Supplier API returned HTTP 409 Conflict. Reconciling order via idempotency key: '
-                                    ++ vars.supplierIdempotencyKey
-                                ]"/>
+                                message="#['Supplier API returned HTTP 409 Conflict. Reconciling order via idempotency key: '&#10;                                    ++ vars.supplierIdempotencyKey]"/>
 
                         <set-variable variableName="supplierResult"
                                       value="#[{

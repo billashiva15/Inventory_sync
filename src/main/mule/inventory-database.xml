@@ -37,7 +37,7 @@ timestampText as LocalDateTime {format: "yyyyMMddHHmm"}
         </ee:transform>
 
         <!-- Check for Duplicate File Name or Checksum in snapshot_log -->
-        <db:select doc:name="Check Duplicate Snapshot">
+        <db:select doc:name="Check Duplicate Snapshot" config-ref="Database_Config">
             <db:sql><![CDATA[
                 SELECT snapshot_id, file_name, status FROM snapshot_log WHERE file_name = :fileName LIMIT 1
             ]]></db:sql>
@@ -53,7 +53,7 @@ timestampText as LocalDateTime {format: "yyyyMMddHHmm"}
             </when>
             <otherwise>
                 <!-- Check Latest Completed Snapshot for Stale Snapshot Validation (#4) -->
-                <db:select doc:name="Check Latest Warehouse Snapshot">
+                <db:select doc:name="Check Latest Warehouse Snapshot" config-ref="Database_Config">
                     <db:sql><![CDATA[
                         SELECT snapshot_ts FROM snapshot_log WHERE warehouse_code = :warehouseCode AND status = 'PROCESSED' ORDER BY snapshot_ts DESC LIMIT 1
                     ]]></db:sql>
@@ -64,7 +64,7 @@ timestampText as LocalDateTime {format: "yyyyMMddHHmm"}
 
                 <choice doc:name="Stale Snapshot Decision">
                     <when expression="#[!isEmpty(payload) and vars.snapshotTimestamp &lt;= payload[0].snapshot_ts]">
-                        <db:insert doc:name="Record Stale Snapshot Log">
+                        <db:insert doc:name="Record Stale Snapshot Log" config-ref="Database_Config">
                             <db:sql><![CDATA[
                                 INSERT INTO snapshot_log (file_name, file_checksum, warehouse_code, snapshot_ts, status, total_rows, accepted_rows, rejected_rows, correlation_id, started_at, finished_at)
                                 VALUES (:fileName, :fileChecksum, :warehouseCode, :snapshotTs, 'SKIPPED_STALE', 0, 0, 0, :correlationId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -84,25 +84,25 @@ timestampText as LocalDateTime {format: "yyyyMMddHHmm"}
                     </when>
                     <otherwise>
                         <!-- Initialize Snapshot Log as IN_PROGRESS -->
-                        <db:insert doc:name="Create IN_PROGRESS Snapshot Log">
-                            <db:sql><![CDATA[
-                                INSERT INTO snapshot_log (file_name, file_checksum, warehouse_code, snapshot_ts, status, total_rows, accepted_rows, rejected_rows, correlation_id, started_at)
-                                VALUES (:fileName, :fileChecksum, :warehouseCode, :snapshotTs, 'IN_PROGRESS', :totalRows, 0, 0, :correlationId, CURRENT_TIMESTAMP)
-                            ]]></db:sql>
-                            <db:input-parameters><![CDATA[
-                                #[{
-                                    fileName: vars.sourceFileName,
-                                    fileChecksum: vars.fileChecksum default 'ACTIVE_CHK',
-                                    warehouseCode: vars.warehouseCode,
-                                    snapshotTs: vars.snapshotTimestamp,
-                                    totalRows: sizeOf(vars.rawRows default []),
-                                    correlationId: vars.correlationId
-                                }]
-                            ]]></db:input-parameters>
-                        </db:insert>
+<db:insert doc:name="Create IN_PROGRESS Snapshot Log" config-ref="Database_Config">
+    <db:sql><![CDATA[
+        INSERT INTO snapshot_log (file_name, file_checksum, warehouse_code, snapshot_ts, status, total_rows, accepted_rows, rejected_rows, correlation_id, started_at)
+        VALUES (:fileName, :fileChecksum, :warehouseCode, :snapshotTs, 'IN_PROGRESS', :totalRows, 0, 0, :correlationId, CURRENT_TIMESTAMP)
+    ]]></db:sql>
+    <db:input-parameters><![CDATA[
+        #[{
+            fileName: vars.sourceFileName,
+            fileChecksum: vars.fileChecksum default uuid(),
+            warehouseCode: vars.warehouseCode,
+            snapshotTs: vars.snapshotTimestamp,
+            totalRows: sizeOf(vars.rawRows default []),
+            correlationId: vars.correlationId
+        }]
+    ]]></db:input-parameters>
+</db:insert>
 
                         <!-- Retrieve Generated snapshot_id -->
-                        <db:select doc:name="Fetch Snapshot ID">
+                        <db:select doc:name="Fetch Snapshot ID" config-ref="Database_Config">
                             <db:sql><![CDATA[
                                 SELECT snapshot_id FROM snapshot_log WHERE file_name = :fileName LIMIT 1
                             ]]></db:sql>
@@ -117,7 +117,7 @@ timestampText as LocalDateTime {format: "yyyyMMddHHmm"}
                         <flow-ref name="db-upsert-absolute-inventory-levels" doc:name="Call Batch Stock Upsert"/>
 
                         <!-- Complete Snapshot Log as PROCESSED -->
-                        <db:update doc:name="Mark Snapshot PROCESSED">
+                        <db:update doc:name="Mark Snapshot PROCESSED" config-ref="Database_Config">
                             <db:sql><![CDATA[
                                 UPDATE snapshot_log 
                                 SET status = 'PROCESSED', 

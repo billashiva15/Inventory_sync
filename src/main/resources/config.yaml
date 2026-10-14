@@ -11,7 +11,7 @@ db:
   host: "localhost"
   port: "3306"
   user: "root"
-  password: "![INSERT_ENCRYPTED_DB_PASSWORD_HERE]"
+  password: "Rukmini&7890"
   database: "retail_inventory_db"
 
 amqp:
@@ -19,16 +19,16 @@ amqp:
   port: "5672"
   virtualHost: "bzrxdyst"
   username: "bzrxdyst"
-  password: "![INSERT_ENCRYPTED_AMQP_PASSWORD_HERE]"
+  password: "4ylQ1Finvtx8orR55rUKZbknYva9OJSm"
 
 supplier:
   host: "api.supplier-0042.example.com"
   port: "443"
   basePath: "/purchase-orders"
-  token: "![INSERT_ENCRYPTED_TOKEN_HERE]"
+  token: ""
 
 smtp:
   host: "sandbox.smtp.mailtrap.io"
   port: "2525"
   user: "fca475a025d9ac"
-  password: "![PASTE_ENCRYPTED_PASSWORD_HERE]"
+  password: "92ec3d46f59acc"

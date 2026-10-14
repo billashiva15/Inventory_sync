@@ -21,7 +21,7 @@
             <!-- Successful or Skipped files (Duplicate/Stale) move to the dated archive directory -->
             <otherwise>
                 <set-variable variableName="targetDirectory" 
-                              value="#['C:\\data\\inventory\\archive\\' ++ (now() as String {format: 'yyyy\\\\MM\\\\dd'})]" 
+                              value='#[vars.targetLocation default "C:/data/inventory/archive"]' 
                               doc:name="Set Archive Path"/>
             </otherwise>
         </choice>
@@ -33,7 +33,7 @@
                    overwrite="false"/>
                    
         <!-- Save the final archive path for the email template -->
-        <set-variable variableName="archivePath" value="#[vars.targetDirectory ++ '\\' ++ vars.sourceFileName]" doc:name="Set Archive Path Var"/>
+        <set-variable variableName="archivePath" value='"$(vars.targetDirectory)\\$(vars.sourceFileName)"' doc:name="Set Archive Path Var"/>
 
         <!-- Construct the input payload required by your DWL email template -->
         <ee:transform doc:name="Prepare Load Summary Metrics">

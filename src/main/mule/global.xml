@@ -15,8 +15,5 @@
     <configuration-properties doc:name="Configuration properties" file="config.yaml" />
 
     <!-- Tells Mule how to decrypt the ![...] values found inside config.yaml -->
-    <secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" file="config.yaml" key="${encryption.key}" >
-        <secure-properties:encrypt algorithm="Blowfish" mode="CBC"/>
-    </secure-properties:config>
 
 </mule>
